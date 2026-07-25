@@ -109,7 +109,7 @@
             "#F15BB5","#FFEE56","#00F5D4","#00BBF9","#6C757D","#495057","#343A40","#212529","#CED4DA","#DEE2E6"
         ];
 
-        let inventory = JSON.parse(localStorage.getItem('dhtsa_library_inventory')) || [
+        let inventory = JSON.parse(localStorage.getItem('dhstsa_library_inventory')) || [
             { id: 1, itemName: "Example Item A", category: "Category 1", status: "Available", itemizedPrice: 10.00, availableQty: 4, totalQty: 5, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') },
             { id: 2, itemName: "Example Item B", category: "Category 1", status: "Available", itemizedPrice: 20.00, totalQty: 8, availableQty: 8, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') }
         ];
@@ -126,7 +126,7 @@
         }
 
         function saveAndRefresh() {
-            localStorage.setItem('dhtsa_library_inventory', JSON.stringify(inventory));
+            localStorage.setItem('dhstsa_library_inventory', JSON.stringify(inventory));
             renderTable();
         }
 
