@@ -76,7 +76,7 @@
                         <th class="p-3">Status</th>
                         <th class="p-3">Retail</th>
                         <th class="p-3">Wholesale</th>
-                        <th class="p-3">Library Stock (Avail / Total)</th>
+                        <th class="p-3">Item Stock (Avail / Total)</th>
                         <th class="p-3">Logged Date</th>
                         <th class="p-3">Actions</th>
                     </tr>
@@ -237,7 +237,7 @@
                 if (!isNaN(val) && val >= 0) {
                     item.totalQty = val;
                     if (item.availableQty > val) {
-                        item.availableQty = val; // clamp available stock if total drops below it
+                        item.availableQty = val; 
                     }
                     saveAndRefresh();
                 }
