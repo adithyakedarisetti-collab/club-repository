@@ -31,12 +31,46 @@
                 <input type="number" id="totalQuantity" placeholder="Total Stock" required class="border p-2 rounded bg-white flex-1">
                 <input type="number" id="availableQuantity" placeholder="Available Stock" required class="border p-2 rounded bg-white flex-1">
             </div>
-            <div></div>
+            
+            <!-- Image Dropzone / Camera / Paste Zone -->
+            <div class="flex flex-col md:col-span-3">
+                <label class="text-xs text-gray-600 mb-1 font-medium">Item Image (Upload, Camera Capture, Drag & Drop, or Paste)</label>
+                <div id="dropZone" class="border-2 border-dashed border-gray-300 p-4 rounded bg-white text-center cursor-pointer hover:border-blue-500 transition-colors flex flex-col items-center justify-center relative">
+                    <input type="file" id="itemImage" accept="image/*,.heif,.heic" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onchange="handleFileSelect(this.files[0])">
+                    <div id="dropZoneText" class="text-xs text-gray-500 pointer-events-none">
+                        <p class="font-semibold text-gray-700">Drag & drop an image here, paste from clipboard, or click to browse</p>
+                        <p class="text-[10px] text-gray-400 mt-1">Supports HEIF, JPG, PNG, etc.</p>
+                    </div>
+                    <div id="imagePreviewContainer" class="hidden mt-2 relative">
+                        <img id="previewImg" src="" alt="Preview" class="w-20 h-20 object-cover rounded shadow border">
+                        <button type="button" onclick="clearImage(event)" class="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold hover:bg-red-700">&times;</button>
+                    </div>
+                </div>
+                <div class="mt-2 flex gap-2">
+                    <button type="button" onclick="openCameraModal()" class="bg-gray-700 text-white text-xs px-3 py-1.5 rounded font-semibold hover:bg-gray-800">Use Live Camera</button>
+                </div>
+            </div>
+
             <div class="md:col-span-3 flex gap-2">
                 <button type="submit" id="submitBtn" class="flex-1 bg-blue-600 text-white p-2 rounded font-semibold hover:bg-blue-700">Add Item</button>
                 <button type="button" id="cancelEditBtn" onclick="cancelEdit()" class="hidden bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500">Cancel</button>
             </div>
         </form>
+
+        <!-- Live Camera Modal -->
+        <div id="cameraModal" class="hidden fixed inset-0 z-50 bg-black bg-opacity-70 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl p-4 max-w-md w-full flex flex-col items-center shadow-xl">
+                <h3 class="text-lg font-bold mb-2">Capture Photo</h3>
+                <div class="relative w-full bg-black rounded overflow-hidden aspect-video flex items-center justify-center">
+                    <video id="cameraVideo" autoplay playsinline class="w-full h-full object-cover"></video>
+                </div>
+                <canvas id="cameraCanvas" class="hidden"></canvas>
+                <div class="flex gap-2 mt-4 w-full">
+                    <button type="button" onclick="takeSnapshot()" class="flex-1 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700">Capture</button>
+                    <button type="button" onclick="closeCameraModal()" class="flex-1 bg-gray-500 text-white py-2 rounded font-semibold hover:bg-gray-600">Cancel</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Search & Filter -->
         <div class="flex flex-col md:flex-row gap-4 mb-6">
@@ -66,6 +100,7 @@
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-gray-200 text-gray-700 text-sm">
+                        <th class="p-3">Image</th>
                         <th class="p-3">ID</th>
                         <th class="p-3">Item Name</th>
                         <th class="p-3">Category</th>
@@ -110,9 +145,96 @@
         ];
 
         let inventory = JSON.parse(localStorage.getItem('dhstsa_library_inventory')) || [
-            { id: 1, itemName: "Example Item A", category: "Category 1", status: "Available", itemizedPrice: 10.00, availableQty: 4, totalQty: 5, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') },
-            { id: 2, itemName: "Example Item B", category: "Category 1", status: "Available", itemizedPrice: 20.00, totalQty: 8, availableQty: 8, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') }
+            { id: 1, itemName: "Example Item A", category: "Category 1", status: "Available", itemizedPrice: 10.00, availableQty: 4, totalQty: 5, image: "", dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') },
+            { id: 2, itemName: "Example Item B", category: "Category 1", status: "Available", itemizedPrice: 20.00, totalQty: 8, availableQty: 8, image: "", dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') }
         ];
+
+        let currentImageData = "";
+        let cameraStream = null;
+
+        // Clipboard paste listener for images
+        window.addEventListener('paste', function(e) {
+            const items = e.clipboardData.items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    handleFileSelect(blob);
+                    break;
+                }
+            }
+        });
+
+        // Drag and drop handlers
+        const dropZone = document.getElementById('dropZone');
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, e => { e.preventDefault(); dropZone.classList.add('border-blue-600', 'bg-blue-50'); }, false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, e => { e.preventDefault(); dropZone.classList.remove('border-blue-600', 'bg-blue-50'); }, false);
+        });
+        dropZone.addEventListener('drop', e => {
+            const dt = e.dataTransfer;
+            const file = dt.files[0];
+            if (file) handleFileSelect(file);
+        });
+
+        function handleFileSelect(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentImageData = e.target.result;
+                document.getElementById('previewImg').src = currentImageData;
+                document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                document.getElementById('dropZoneText').classList.add('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearImage(e) {
+            e.stopPropagation();
+            currentImageData = "";
+            document.getElementById('previewImg').src = "";
+            document.getElementById('imagePreviewContainer').classList.add('hidden');
+            document.getElementById('dropZoneText').classList.remove('hidden');
+            document.getElementById('itemImage').value = "";
+        }
+
+        // Camera functions
+        async function openCameraModal() {
+            const modal = document.getElementById('cameraModal');
+            modal.classList.remove('hidden');
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                document.getElementById('cameraVideo').srcObject = cameraStream;
+            } catch (err) {
+                alert('Unable to access camera: ' + err.message);
+                closeCameraModal();
+            }
+        }
+
+        function closeCameraModal() {
+            const modal = document.getElementById('cameraModal');
+            modal.classList.add('hidden');
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+        }
+
+        function takeSnapshot() {
+            const video = document.getElementById('cameraVideo');
+            const canvas = document.getElementById('cameraCanvas');
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            currentImageData = canvas.toDataURL('image/png');
+            
+            document.getElementById('previewImg').src = currentImageData;
+            document.getElementById('imagePreviewContainer').classList.remove('hidden');
+            document.getElementById('dropZoneText').classList.add('hidden');
+            closeCameraModal();
+        }
 
         function showToast(message) {
             const toast = document.getElementById('toastNotification');
@@ -147,6 +269,9 @@
                 inventory[editIndex].itemizedPrice = itemPriceInput;
                 inventory[editIndex].totalQty = totalQtyInput;
                 inventory[editIndex].availableQty = Math.min(availableQtyInput, totalQtyInput);
+                if (currentImageData) {
+                    inventory[editIndex].image = currentImageData;
+                }
                 
                 showToast(`Item successfully updated!`);
                 cancelEdit();
@@ -161,6 +286,9 @@
                     showToast(`Existing item matched! Quantities combined into item ID ${inventory[existingIndex].id}.`);
                     inventory[existingIndex].totalQty += totalQtyInput;
                     inventory[existingIndex].availableQty = Math.min(inventory[existingIndex].availableQty + availableQtyInput, inventory[existingIndex].totalQty);
+                    if (currentImageData) {
+                        inventory[existingIndex].image = currentImageData;
+                    }
                 } else {
                     const newItem = {
                         id: inventory.length ? Math.max(...inventory.map(i => i.id)) + 1 : 1,
@@ -170,11 +298,13 @@
                         itemizedPrice: itemPriceInput,
                         totalQty: totalQtyInput,
                         availableQty: Math.min(availableQtyInput, totalQtyInput),
+                        image: currentImageData || "",
                         dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ')
                     };
                     inventory.push(newItem);
                 }
                 this.reset();
+                clearImage({ stopPropagation: () => {} });
             }
 
             saveAndRefresh();
@@ -191,6 +321,15 @@
                 document.getElementById('itemizedPrice').value = item.itemizedPrice;
                 document.getElementById('totalQuantity').value = item.totalQty;
                 document.getElementById('availableQuantity').value = item.availableQty;
+                
+                if (item.image) {
+                    currentImageData = item.image;
+                    document.getElementById('previewImg').src = currentImageData;
+                    document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                    document.getElementById('dropZoneText').classList.add('hidden');
+                } else {
+                    clearImage({ stopPropagation: () => {} });
+                }
 
                 document.getElementById('submitBtn').innerText = "Update Item";
                 document.getElementById('submitBtn').classList.replace('bg-blue-600', 'bg-amber-600');
@@ -204,6 +343,7 @@
         function cancelEdit() {
             document.getElementById('editIndex').value = -1;
             document.getElementById('itemForm').reset();
+            clearImage({ stopPropagation: () => {} });
             document.getElementById('submitBtn').innerText = "Add Item";
             document.getElementById('submitBtn').classList.replace('bg-amber-600', 'bg-blue-600');
             document.getElementById('submitBtn').classList.replace('hover:bg-amber-700', 'hover:bg-blue-700');
@@ -277,9 +417,11 @@
                 }
 
                 const categoryBg = catColorMap[item.category.trim()] ? `background-color: ${catColorMap[item.category.trim()]}; color: #000; font-weight: 500;` : '';
+                const imageHtml = item.image ? `<img src="${item.image}" alt="Item" class="w-10 h-10 object-cover rounded shadow border">` : `<span class="text-xs text-gray-400">No Image</span>`;
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
+                    <td class="p-3">${imageHtml}</td>
                     <td class="p-3">${item.id}</td>
                     <td class="p-3 font-medium">${item.itemName}</td>
                     <td class="p-3 rounded" style="${categoryBg}">${item.category}</td>
