@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,28 +8,34 @@
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
 <body class="bg-gray-100 min-h-screen p-6">
-    <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
+    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
         <h1 class="text-2xl font-bold text-gray-800 mb-4">Club Inventory Tracker</h1>
         
+        <!-- Duplicate Warning Banner Modal / Toast Container -->
+        <div id="toastNotification" class="hidden fixed top-5 right-5 z-50 bg-amber-500 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 transition-opacity duration-300">
+            <span id="toastMessage">Duplicate item detected and automatically stacked!</span>
+            <button onclick="hideToast()" class="font-bold text-lg">&times;</button>
+        </div>
+
         <!-- Add Item Form -->
         <form id="itemForm" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-            <input type="text" id="itemName" placeholder="Item Name" required class="border p-2 rounded">
-            <input type="text" id="category" placeholder="Category" required class="border p-2 rounded">
-            <select id="status" class="border p-2 rounded">
+            <input type="text" id="itemName" placeholder="Item Name" required class="border p-2 rounded bg-white">
+            <input type="text" id="category" placeholder="Category" required class="border p-2 rounded bg-white">
+            <select id="status" class="border p-2 rounded bg-white">
                 <option value="In Stock">In Stock</option>
                 <option value="Checked Out">Checked Out</option>
                 <option value="Discontinued">Discontinued</option>
             </select>
-            <input type="number" step="0.01" id="itemizedPrice" placeholder="Itemized Price ($)" required class="border p-2 rounded">
-            <input type="number" step="0.01" id="wholesalePrice" placeholder="Wholesale Price ($)" required class="border p-2 rounded">
-            <input type="number" id="quantity" placeholder="Quantity" required class="border p-2 rounded">
+            <input type="number" step="0.01" id="itemizedPrice" placeholder="Itemized Price ($)" required class="border p-2 rounded bg-white">
+            <input type="number" step="0.01" id="wholesalePrice" placeholder="Wholesale Price ($)" required class="border p-2 rounded bg-white">
+            <input type="number" id="quantity" placeholder="Quantity" required class="border p-2 rounded bg-white">
             <button type="submit" class="md:col-span-3 bg-blue-600 text-white p-2 rounded font-semibold hover:bg-blue-700">Add Item</button>
         </form>
 
         <!-- Search & Filter -->
         <div class="flex flex-col md:flex-row gap-4 mb-6">
-            <input type="text" id="searchKeyword" placeholder="Search keyword..." class="border p-2 rounded flex-1" oninput="renderTable()">
-            <select id="filterStatus" class="border p-2 rounded" onchange="renderTable()">
+            <input type="text" id="searchKeyword" placeholder="Search keyword or category..." class="border p-2 rounded flex-1 bg-white" oninput="renderTable()">
+            <select id="filterStatus" class="border p-2 rounded bg-white" onchange="renderTable()">
                 <option value="">All Statuses</option>
                 <option value="In Stock">In Stock</option>
                 <option value="Checked Out">Checked Out</option>
@@ -76,10 +83,45 @@
     </div>
 
     <script>
+        // 200 Distinct Hex Codes Palette for Category Color Highlighting
+        const HEX_GRADIENT_200 = [
+            "#5A1893","#7B2CBF","#9D4EDD","#C77DFF","#E0AAFF","#3A0CA3","#4361EE","#4CC9F0","#4895EF","#560BAD",
+            "#F72585","#B5179E","#7209B7","#560BAD","#480CA8","#3A0CA3","#3F37C9","#4361EE","#4895EF","#4CC9F0",
+            "#FF595E","#FFCA3A","#8AC926","#1982C4","#6A4C93","#FF70A6","#FF9770","#FFD670","#E9FF70","#70D6FF",
+            "#2A9D8F","#264653","#E76F51","#F4A261","#E9C46A","#606C38","#283618","#FEFAE0","#DDA15E","#BC6C25",
+            "#6B705C","#A5A58D","#B7B7A4","#FFE8D6","#DD7230","#F4C430","#32CD32","#00FA9A","#00CED1","#1E90FF",
+            "#9370DB","#FF1493","#FF69B4","#FFB6C1","#00FFFF","#7FFFD4","#F0E68C","#BDB76B","#EEE8AA","#9ACD32",
+            "#556B2F","#8FBC8F","#2E8B57","#3CB371","#20B2AA","#008B8B","#008080","#4682B4","#B0C4DE","#6495ED",
+            "#7B68EE","#6A5ACD","#483D8B","#48D1CC","#00FFFF","#00FF7F","#ADFF2F","#FFFF00","#FFD700","#FFA500",
+            "#FF8C00","#FF4500","#DC143C","#FF0000","#B22222","#8B0000","#CD5C5C","#F08080","#FA8072","#E9967A",
+            "#FFA07A","#FFDEAD","#DEB887","#D2B48C","#BC8F8F","#F4A460","#DAA520","#B8860B","#CD853F","#D2691E",
+            "#A0522D","#8B4513","#FFF8DC","#FFEBCD","#FFE4C4","#FFFAF0","#FDF5E6","#FAF0E6","#FAEBD7","#FFEFD5",
+            "#FFE4B5","#FFDAB9","#EEE2B8","#FFFACD","#FFF8E7","#F5DEB3","#F5FFFA","#F0FFF0","#F5F5DC","#FDFDFD",
+            "#E6E6FA","#FFF0F5","#FFE4E1","#F0F8FF","#F8F8FF","#F5FFFA","#F0FFFF","#F4F4F4","#E0E0E0","#D3D3D3",
+            "#C0C0C0","#A9A9A9","#808080","#696969","#505050","#383838","#202020","#101010","#000000","#1B4931",
+            "#1B3B6F","#6247AA","#A06CD5","#B392AC","#481D24","#540B0E","#9E2A2B","#335C67","#E09F3E","#540B0E",
+            "#003049","#D62828","#F77F00","#FCBF49","#EAE2B7","#2B2D42","#8D99AE","#EDF2F4","#EF233C","#D90429",
+            "#8CB369","#F4E2BB","#F4A261","#E76F51","#264653","#2A9D8F","#E9C46A","#F4A261","#E76F51","#264653",
+            "#606C38","#283618","#FEFAE0","#DDA15E","#BC6C25","#6B705C","#A5A58D","#B7B7A4","#FFE8D6","#DD7230",
+            "#90E0EF","#00B4D8","#0077B6","#03045E","#ADE8F4","#CAF0F8","#94D2BD","#0A9396","#005F73","#9B5DE5",
+            "#F15BB5","#FFEE56","#00F5D4","#00BBF9","#6C757D","#495057","#343A40","#212529","#CED4DA","#DEE2E6"
+        ];
+
         let inventory = JSON.parse(localStorage.getItem('club_inventory')) || [
             { id: 1, itemName: "Example Item A", category: "Category 1", status: "In Stock", itemizedPrice: 10.00, wholesalePrice: 5.00, quantity: 5, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') },
-            { id: 2, itemName: "Example Item B", category: "Category 2", status: "In Stock", itemizedPrice: 20.00, wholesalePrice: 12.00, quantity: 8, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') }
+            { id: 2, itemName: "Example Item B", category: "Category 1", status: "In Stock", itemizedPrice: 20.00, wholesalePrice: 12.00, quantity: 8, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') }
         ];
+
+        function showToast(message) {
+            const toast = document.getElementById('toastNotification');
+            document.getElementById('toastMessage').innerText = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => { hideToast(); }, 5000);
+        }
+
+        function hideToast() {
+            document.getElementById('toastNotification').classList.add('hidden');
+        }
 
         function saveAndRefresh() {
             localStorage.setItem('club_inventory', JSON.stringify(inventory));
@@ -88,17 +130,42 @@
 
         document.getElementById('itemForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const newItem = {
-                id: inventory.length ? inventory[inventory.length - 1].id + 1 : 1,
-                itemName: document.getElementById('itemName').value,
-                category: document.getElementById('category').value,
-                status: document.getElementById('status').value,
-                itemizedPrice: parseFloat(document.getElementById('itemizedPrice').value),
-                wholesalePrice: parseFloat(document.getElementById('wholesalePrice').value),
-                quantity: parseInt(document.getElementById('quantity').value),
-                dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ')
-            };
-            inventory.push(newItem);
+            const nameInput = document.getElementById('itemName').value.trim();
+            const catInput = document.getElementById('category').value.trim();
+            const statusInput = document.getElementById('status').value;
+            const itemPriceInput = parseFloat(document.getElementById('itemizedPrice').value);
+            const wholesalePriceInput = parseFloat(document.getElementById('wholesalePrice').value);
+            const qtyInput = parseInt(document.getElementById('quantity').value);
+
+            // Check for exact match on Name, Category, Itemized Price, and Wholesale Price
+            const existingIndex = inventory.findIndex(item => 
+                item.itemName.toLowerCase() === nameInput.toLowerCase() &&
+                item.category.toLowerCase() === catInput.toLowerCase() &&
+                item.itemizedPrice === itemPriceInput &&
+                item.wholesalePrice === wholesalePriceInput
+            );
+
+            if (existingIndex !== -1) {
+                if (inventory[existingIndex].quantity === qtyInput) {
+                    showToast(`Notice: Identical item exists. Quantities have been stacked together.`);
+                } else {
+                    showToast(`Existing item matched! Quantities combined into item ID ${inventory[existingIndex].id}.`);
+                }
+                inventory[existingIndex].quantity += qtyInput;
+            } else {
+                const newItem = {
+                    id: inventory.length ? Math.max(...inventory.map(i => i.id)) + 1 : 1,
+                    itemName: nameInput,
+                    category: catInput,
+                    status: statusInput,
+                    itemizedPrice: itemPriceInput,
+                    wholesalePrice: wholesalePriceInput,
+                    quantity: qtyInput,
+                    dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ')
+                };
+                inventory.push(newItem);
+            }
+
             saveAndRefresh();
             this.reset();
         });
@@ -113,6 +180,22 @@
             const statusFilter = document.getElementById('filterStatus').value;
             const tbody = document.getElementById('inventoryTableBody');
             tbody.innerHTML = '';
+
+            // Compute category frequencies to handle 200-hex gradient color mapping for categories with >= 2 items
+            const categoryCounts = {};
+            inventory.forEach(item => {
+                const cat = item.category.trim();
+                categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+            });
+
+            const catColorMap = {};
+            let paletteIndex = 0;
+            for (let cat in categoryCounts) {
+                if (categoryCounts[cat] >= 2) {
+                    catColorMap[cat] = HEX_GRADIENT_200[paletteIndex % HEX_GRADIENT_200.length];
+                    paletteIndex++;
+                }
+            }
 
             let totalQty = 0;
             let totalRetail = 0;
@@ -131,11 +214,13 @@
                     totalWholesale += (item.wholesalePrice * item.quantity);
                 }
 
+                const categoryBg = catColorMap[item.category.trim()] ? `background-color: ${catColorMap[item.category.trim()]}; color: #000; font-weight: 500;` : '';
+
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td class="p-3">${item.id}</td>
                     <td class="p-3 font-medium">${item.itemName}</td>
-                    <td class="p-3">${item.category}</td>
+                    <td class="p-3 rounded" style="${categoryBg}">${item.category}</td>
                     <td class="p-3"><span class="px-2 py-1 rounded text-xs ${item.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${item.status}</span></td>
                     <td class="p-3">$${item.itemizedPrice.toFixed(2)}</td>
                     <td class="p-3">$${item.wholesalePrice.toFixed(2)}</td>
@@ -155,3 +240,5 @@
     </script>
 </body>
 </html>
+
+```
