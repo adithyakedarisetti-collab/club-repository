@@ -22,13 +22,16 @@
             <input type="text" id="itemName" placeholder="Item Name" required class="border p-2 rounded bg-white">
             <input type="text" id="category" placeholder="Category" required class="border p-2 rounded bg-white">
             <select id="status" class="border p-2 rounded bg-white">
-                <option value="In Stock">In Stock</option>
+                <option value="Available">Available</option>
                 <option value="Checked Out">Checked Out</option>
                 <option value="Discontinued">Discontinued</option>
             </select>
             <input type="number" step="0.01" id="itemizedPrice" placeholder="Itemized Price ($)" required class="border p-2 rounded bg-white">
             <input type="number" step="0.01" id="wholesalePrice" placeholder="Wholesale Price ($)" required class="border p-2 rounded bg-white">
-            <input type="number" id="quantity" placeholder="Quantity" required class="border p-2 rounded bg-white">
+            <div class="flex gap-2">
+                <input type="number" id="totalQuantity" placeholder="Total Stock" required class="border p-2 rounded bg-white flex-1">
+                <input type="number" id="availableQuantity" placeholder="Available Stock" required class="border p-2 rounded bg-white flex-1">
+            </div>
             <div class="md:col-span-3 flex gap-2">
                 <button type="submit" id="submitBtn" class="flex-1 bg-blue-600 text-white p-2 rounded font-semibold hover:bg-blue-700">Add Item</button>
                 <button type="button" id="cancelEditBtn" onclick="cancelEdit()" class="hidden bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500">Cancel</button>
@@ -40,7 +43,7 @@
             <input type="text" id="searchKeyword" placeholder="Search keyword or category..." class="border p-2 rounded flex-1 bg-white" oninput="renderTable()">
             <select id="filterStatus" class="border p-2 rounded bg-white" onchange="renderTable()">
                 <option value="">All Statuses</option>
-                <option value="In Stock">In Stock</option>
+                <option value="Available">Available</option>
                 <option value="Checked Out">Checked Out</option>
                 <option value="Discontinued">Discontinued</option>
             </select>
@@ -49,7 +52,7 @@
         <!-- Financial Summary -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <p class="text-sm text-blue-600 font-semibold">Total In Stock Qty</p>
+                <p class="text-sm text-blue-600 font-semibold">Total Available Qty</p>
                 <p id="sumQty" class="text-xl font-bold text-blue-900">0</p>
             </div>
             <div class="bg-green-50 p-4 rounded-lg border border-green-200">
@@ -73,7 +76,7 @@
                         <th class="p-3">Status</th>
                         <th class="p-3">Retail</th>
                         <th class="p-3">Wholesale</th>
-                        <th class="p-3">Qty</th>
+                        <th class="p-3">Library Stock (Avail / Total)</th>
                         <th class="p-3">Logged Date</th>
                         <th class="p-3">Actions</th>
                     </tr>
@@ -110,9 +113,9 @@
             "#F15BB5","#FFEE56","#00F5D4","#00BBF9","#6C757D","#495057","#343A40","#212529","#CED4DA","#DEE2E6"
         ];
 
-        let inventory = JSON.parse(localStorage.getItem('dhtsa_inventory')) || [
-            { id: 1, itemName: "Example Item A", category: "Category 1", status: "In Stock", itemizedPrice: 10.00, wholesalePrice: 5.00, quantity: 5, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') },
-            { id: 2, itemName: "Example Item B", category: "Category 1", status: "In Stock", itemizedPrice: 20.00, wholesalePrice: 12.00, quantity: 8, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') }
+        let inventory = JSON.parse(localStorage.getItem('dhtsa_library_inventory')) || [
+            { id: 1, itemName: "Example Item A", category: "Category 1", status: "Available", itemizedPrice: 10.00, wholesalePrice: 5.00, availableQty: 4, totalQty: 5, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') },
+            { id: 2, itemName: "Example Item B", category: "Category 1", status: "Available", itemizedPrice: 20.00, wholesalePrice: 12.00, totalQty: 8, availableQty: 8, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') }
         ];
 
         function showToast(message) {
@@ -127,7 +130,7 @@
         }
 
         function saveAndRefresh() {
-            localStorage.setItem('dhtsa_inventory', JSON.stringify(inventory));
+            localStorage.setItem('dhtsa_library_inventory', JSON.stringify(inventory));
             renderTable();
         }
 
@@ -139,7 +142,8 @@
             const statusInput = document.getElementById('status').value;
             const itemPriceInput = parseFloat(document.getElementById('itemizedPrice').value);
             const wholesalePriceInput = parseFloat(document.getElementById('wholesalePrice').value);
-            const qtyInput = parseInt(document.getElementById('quantity').value);
+            const totalQtyInput = parseInt(document.getElementById('totalQuantity').value);
+            const availableQtyInput = parseInt(document.getElementById('availableQuantity').value);
 
             if (editIndex !== -1) {
                 inventory[editIndex].itemName = nameInput;
@@ -147,7 +151,8 @@
                 inventory[editIndex].status = statusInput;
                 inventory[editIndex].itemizedPrice = itemPriceInput;
                 inventory[editIndex].wholesalePrice = wholesalePriceInput;
-                inventory[editIndex].quantity = qtyInput;
+                inventory[editIndex].totalQty = totalQtyInput;
+                inventory[editIndex].availableQty = Math.min(availableQtyInput, totalQtyInput);
                 
                 showToast(`Item successfully updated!`);
                 cancelEdit();
@@ -160,12 +165,9 @@
                 );
 
                 if (existingIndex !== -1) {
-                    if (inventory[existingIndex].quantity === qtyInput) {
-                        showToast(`Notice: Identical item exists. Quantities have been stacked together.`);
-                    } else {
-                        showToast(`Existing item matched! Quantities combined into item ID ${inventory[existingIndex].id}.`);
-                    }
-                    inventory[existingIndex].quantity += qtyInput;
+                    showToast(`Existing item matched! Quantities combined into item ID ${inventory[existingIndex].id}.`);
+                    inventory[existingIndex].totalQty += totalQtyInput;
+                    inventory[existingIndex].availableQty = Math.min(inventory[existingIndex].availableQty + availableQtyInput, inventory[existingIndex].totalQty);
                 } else {
                     const newItem = {
                         id: inventory.length ? Math.max(...inventory.map(i => i.id)) + 1 : 1,
@@ -174,7 +176,8 @@
                         status: statusInput,
                         itemizedPrice: itemPriceInput,
                         wholesalePrice: wholesalePriceInput,
-                        quantity: qtyInput,
+                        totalQty: totalQtyInput,
+                        availableQty: Math.min(availableQtyInput, totalQtyInput),
                         dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ')
                     };
                     inventory.push(newItem);
@@ -195,7 +198,8 @@
                 document.getElementById('status').value = item.status;
                 document.getElementById('itemizedPrice').value = item.itemizedPrice;
                 document.getElementById('wholesalePrice').value = item.wholesalePrice;
-                document.getElementById('quantity').value = item.quantity;
+                document.getElementById('totalQuantity').value = item.totalQty;
+                document.getElementById('availableQuantity').value = item.availableQty;
 
                 document.getElementById('submitBtn').innerText = "Update Item";
                 document.getElementById('submitBtn').classList.replace('bg-blue-600', 'bg-amber-600');
@@ -213,6 +217,31 @@
             document.getElementById('submitBtn').classList.replace('bg-amber-600', 'bg-blue-600');
             document.getElementById('submitBtn').classList.replace('hover:bg-amber-700', 'hover:bg-blue-700');
             document.getElementById('cancelEditBtn').classList.add('hidden');
+        }
+
+        function updateAvailable(id, newAvail) {
+            const item = inventory.find(i => i.id === id);
+            if (item) {
+                const val = parseInt(newAvail);
+                if (!isNaN(val) && val >= 0 && val <= item.totalQty) {
+                    item.availableQty = val;
+                    saveAndRefresh();
+                }
+            }
+        }
+
+        function updateTotal(id, newTotal) {
+            const item = inventory.find(i => i.id === id);
+            if (item) {
+                const val = parseInt(newTotal);
+                if (!isNaN(val) && val >= 0) {
+                    item.totalQty = val;
+                    if (item.availableQty > val) {
+                        item.availableQty = val; // clamp available stock if total drops below it
+                    }
+                    saveAndRefresh();
+                }
+            }
         }
 
         function deleteItem(id) {
@@ -241,7 +270,7 @@
                 }
             }
 
-            let totalQty = 0;
+            let totalAvailQtySum = 0;
             let totalRetail = 0;
             let totalWholesale = 0;
 
@@ -252,10 +281,10 @@
             });
 
             filtered.forEach(item => {
-                if (item.status === 'In Stock') {
-                    totalQty += item.quantity;
-                    totalRetail += (item.itemizedPrice * item.quantity);
-                    totalWholesale += (item.wholesalePrice * item.quantity);
+                if (item.status === 'Available') {
+                    totalAvailQtySum += item.availableQty;
+                    totalRetail += (item.itemizedPrice * item.availableQty);
+                    totalWholesale += (item.wholesalePrice * item.availableQty);
                 }
 
                 const categoryBg = catColorMap[item.category.trim()] ? `background-color: ${catColorMap[item.category.trim()]}; color: #000; font-weight: 500;` : '';
@@ -265,10 +294,20 @@
                     <td class="p-3">${item.id}</td>
                     <td class="p-3 font-medium">${item.itemName}</td>
                     <td class="p-3 rounded" style="${categoryBg}">${item.category}</td>
-                    <td class="p-3"><span class="px-2 py-1 rounded text-xs ${item.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${item.status}</span></td>
+                    <td class="p-3">
+                        <select onchange="const item = inventory.find(i => i.id === ${item.id}); item.status = this.value; saveAndRefresh();" class="border p-1 rounded text-xs bg-white">
+                            <option value="Available" ${item.status === 'Available' ? 'selected' : ''}>Available</option>
+                            <option value="Checked Out" ${item.status === 'Checked Out' ? 'selected' : ''}>Checked Out</option>
+                            <option value="Discontinued" ${item.status === 'Discontinued' ? 'selected' : ''}>Discontinued</option>
+                        </select>
+                    </td>
                     <td class="p-3">$${item.itemizedPrice.toFixed(2)}</td>
                     <td class="p-3">$${item.wholesalePrice.toFixed(2)}</td>
-                    <td class="p-3">${item.quantity}</td>
+                    <td class="p-3 flex items-center space-x-1">
+                        <input type="number" min="0" max="${item.totalQty}" value="${item.availableQty}" onchange="updateAvailable(${item.id}, this.value)" class="border p-1 rounded w-14 text-center bg-white" title="Available">
+                        <span>/</span>
+                        <input type="number" min="0" value="${item.totalQty}" onchange="updateTotal(${item.id}, this.value)" class="border p-1 rounded w-14 text-center bg-white" title="Total">
+                    </td>
                     <td class="p-3 text-xs text-gray-500">${item.dateLogged}</td>
                     <td class="p-3 space-x-2">
                         <button onclick="editItem(${item.id})" class="text-blue-600 hover:text-blue-800 font-semibold">Edit</button>
@@ -278,7 +317,7 @@
                 tbody.appendChild(tr);
             });
 
-            document.getElementById('sumQty').innerText = totalQty;
+            document.getElementById('sumQty').innerText = totalAvailQtySum;
             document.getElementById('sumRetail').innerText = `$${totalRetail.toFixed(2)}`;
             document.getElementById('sumWholesale').innerText = `$${totalWholesale.toFixed(2)}`;
         }
