@@ -1,15 +1,14 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Club Inventory Tracker</title>
+    <title>DHTSA Inventory Tracker</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
 <body class="bg-gray-100 min-h-screen p-6">
     <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
-        <h1 class="text-2xl font-bold text-gray-800 mb-4">Club Inventory Tracker</h1>
+        <h1 class="text-2xl font-bold text-gray-800 mb-4">DHTSA Inventory Tracker</h1>
         
         <!-- Duplicate Warning Banner Modal / Toast Container -->
         <div id="toastNotification" class="hidden fixed top-5 right-5 z-50 bg-amber-500 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 transition-opacity duration-300">
@@ -17,8 +16,9 @@
             <button onclick="hideToast()" class="font-bold text-lg">&times;</button>
         </div>
 
-        <!-- Add Item Form -->
+        <!-- Add / Edit Item Form -->
         <form id="itemForm" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+            <input type="hidden" id="editIndex" value="-1">
             <input type="text" id="itemName" placeholder="Item Name" required class="border p-2 rounded bg-white">
             <input type="text" id="category" placeholder="Category" required class="border p-2 rounded bg-white">
             <select id="status" class="border p-2 rounded bg-white">
@@ -29,7 +29,10 @@
             <input type="number" step="0.01" id="itemizedPrice" placeholder="Itemized Price ($)" required class="border p-2 rounded bg-white">
             <input type="number" step="0.01" id="wholesalePrice" placeholder="Wholesale Price ($)" required class="border p-2 rounded bg-white">
             <input type="number" id="quantity" placeholder="Quantity" required class="border p-2 rounded bg-white">
-            <button type="submit" class="md:col-span-3 bg-blue-600 text-white p-2 rounded font-semibold hover:bg-blue-700">Add Item</button>
+            <div class="md:col-span-3 flex gap-2">
+                <button type="submit" id="submitBtn" class="flex-1 bg-blue-600 text-white p-2 rounded font-semibold hover:bg-blue-700">Add Item</button>
+                <button type="button" id="cancelEditBtn" onclick="cancelEdit()" class="hidden bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500">Cancel</button>
+            </div>
         </form>
 
         <!-- Search & Filter -->
@@ -72,7 +75,7 @@
                         <th class="p-3">Wholesale</th>
                         <th class="p-3">Qty</th>
                         <th class="p-3">Logged Date</th>
-                        <th class="p-3">Action</th>
+                        <th class="p-3">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="inventoryTableBody" class="text-sm divide-y divide-gray-200">
@@ -107,7 +110,7 @@
             "#F15BB5","#FFEE56","#00F5D4","#00BBF9","#6C757D","#495057","#343A40","#212529","#CED4DA","#DEE2E6"
         ];
 
-        let inventory = JSON.parse(localStorage.getItem('club_inventory')) || [
+        let inventory = JSON.parse(localStorage.getItem('dhtsa_inventory')) || [
             { id: 1, itemName: "Example Item A", category: "Category 1", status: "In Stock", itemizedPrice: 10.00, wholesalePrice: 5.00, quantity: 5, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') },
             { id: 2, itemName: "Example Item B", category: "Category 1", status: "In Stock", itemizedPrice: 20.00, wholesalePrice: 12.00, quantity: 8, dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ') }
         ];
@@ -124,12 +127,13 @@
         }
 
         function saveAndRefresh() {
-            localStorage.setItem('club_inventory', JSON.stringify(inventory));
+            localStorage.setItem('dhtsa_inventory', JSON.stringify(inventory));
             renderTable();
         }
 
         document.getElementById('itemForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            const editIndex = parseInt(document.getElementById('editIndex').value);
             const nameInput = document.getElementById('itemName').value.trim();
             const catInput = document.getElementById('category').value.trim();
             const statusInput = document.getElementById('status').value;
@@ -137,38 +141,79 @@
             const wholesalePriceInput = parseFloat(document.getElementById('wholesalePrice').value);
             const qtyInput = parseInt(document.getElementById('quantity').value);
 
-            // Check for exact match on Name, Category, Itemized Price, and Wholesale Price
-            const existingIndex = inventory.findIndex(item => 
-                item.itemName.toLowerCase() === nameInput.toLowerCase() &&
-                item.category.toLowerCase() === catInput.toLowerCase() &&
-                item.itemizedPrice === itemPriceInput &&
-                item.wholesalePrice === wholesalePriceInput
-            );
-
-            if (existingIndex !== -1) {
-                if (inventory[existingIndex].quantity === qtyInput) {
-                    showToast(`Notice: Identical item exists. Quantities have been stacked together.`);
-                } else {
-                    showToast(`Existing item matched! Quantities combined into item ID ${inventory[existingIndex].id}.`);
-                }
-                inventory[existingIndex].quantity += qtyInput;
+            if (editIndex !== -1) {
+                inventory[editIndex].itemName = nameInput;
+                inventory[editIndex].category = catInput;
+                inventory[editIndex].status = statusInput;
+                inventory[editIndex].itemizedPrice = itemPriceInput;
+                inventory[editIndex].wholesalePrice = wholesalePriceInput;
+                inventory[editIndex].quantity = qtyInput;
+                
+                showToast(`Item successfully updated!`);
+                cancelEdit();
             } else {
-                const newItem = {
-                    id: inventory.length ? Math.max(...inventory.map(i => i.id)) + 1 : 1,
-                    itemName: nameInput,
-                    category: catInput,
-                    status: statusInput,
-                    itemizedPrice: itemPriceInput,
-                    wholesalePrice: wholesalePriceInput,
-                    quantity: qtyInput,
-                    dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ')
-                };
-                inventory.push(newItem);
+                const existingIndex = inventory.findIndex(item => 
+                    item.itemName.toLowerCase() === nameInput.toLowerCase() &&
+                    item.category.toLowerCase() === catInput.toLowerCase() &&
+                    item.itemizedPrice === itemPriceInput &&
+                    item.wholesalePrice === wholesalePriceInput
+                );
+
+                if (existingIndex !== -1) {
+                    if (inventory[existingIndex].quantity === qtyInput) {
+                        showToast(`Notice: Identical item exists. Quantities have been stacked together.`);
+                    } else {
+                        showToast(`Existing item matched! Quantities combined into item ID ${inventory[existingIndex].id}.`);
+                    }
+                    inventory[existingIndex].quantity += qtyInput;
+                } else {
+                    const newItem = {
+                        id: inventory.length ? Math.max(...inventory.map(i => i.id)) + 1 : 1,
+                        itemName: nameInput,
+                        category: catInput,
+                        status: statusInput,
+                        itemizedPrice: itemPriceInput,
+                        wholesalePrice: wholesalePriceInput,
+                        quantity: qtyInput,
+                        dateLogged: new Date().toISOString().slice(0, 19).replace('T', ' ')
+                    };
+                    inventory.push(newItem);
+                }
+                this.reset();
             }
 
             saveAndRefresh();
-            this.reset();
         });
+
+        function editItem(id) {
+            const index = inventory.findIndex(i => i.id === id);
+            if (index !== -1) {
+                const item = inventory[index];
+                document.getElementById('editIndex').value = index;
+                document.getElementById('itemName').value = item.itemName;
+                document.getElementById('category').value = item.category;
+                document.getElementById('status').value = item.status;
+                document.getElementById('itemizedPrice').value = item.itemizedPrice;
+                document.getElementById('wholesalePrice').value = item.wholesalePrice;
+                document.getElementById('quantity').value = item.quantity;
+
+                document.getElementById('submitBtn').innerText = "Update Item";
+                document.getElementById('submitBtn').classList.replace('bg-blue-600', 'bg-amber-600');
+                document.getElementById('submitBtn').classList.replace('hover:bg-blue-700', 'hover:bg-amber-700');
+                document.getElementById('cancelEditBtn').classList.remove('hidden');
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        function cancelEdit() {
+            document.getElementById('editIndex').value = -1;
+            document.getElementById('itemForm').reset();
+            document.getElementById('submitBtn').innerText = "Add Item";
+            document.getElementById('submitBtn').classList.replace('bg-amber-600', 'bg-blue-600');
+            document.getElementById('submitBtn').classList.replace('hover:bg-amber-700', 'hover:bg-blue-700');
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+        }
 
         function deleteItem(id) {
             inventory = inventory.filter(item => item.id !== id);
@@ -181,7 +226,6 @@
             const tbody = document.getElementById('inventoryTableBody');
             tbody.innerHTML = '';
 
-            // Compute category frequencies to handle 200-hex gradient color mapping for categories with >= 2 items
             const categoryCounts = {};
             inventory.forEach(item => {
                 const cat = item.category.trim();
@@ -226,7 +270,10 @@
                     <td class="p-3">$${item.wholesalePrice.toFixed(2)}</td>
                     <td class="p-3">${item.quantity}</td>
                     <td class="p-3 text-xs text-gray-500">${item.dateLogged}</td>
-                    <td class="p-3"><button onclick="deleteItem(${item.id})" class="text-red-600 hover:text-red-800 font-semibold">Delete</button></td>
+                    <td class="p-3 space-x-2">
+                        <button onclick="editItem(${item.id})" class="text-blue-600 hover:text-blue-800 font-semibold">Edit</button>
+                        <button onclick="deleteItem(${item.id})" class="text-red-600 hover:text-red-800 font-semibold">Delete</button>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -240,5 +287,3 @@
     </script>
 </body>
 </html>
-
-```
